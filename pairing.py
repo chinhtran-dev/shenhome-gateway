@@ -5,6 +5,9 @@ import subprocess
 
 # MQTT Configuration
 MQTT_BROKER = "5bcd2ba05ac244df97c50e24839cfb61.s1.eu.hivemq.cloud"
+MQTT_PORT = 8883
+MQTT_USERNAME = "raspberrypi"
+MQTT_PASSWORD = "R@aspberrypi@123"
 MQTT_TOPIC_PAIRING = "pairing"
 MQTT_TOPIC_REGISTER = "register"
 
@@ -41,6 +44,14 @@ def get_ip_address():
     
     return ip_address
 
+def on_connect(client, userdata, flags, reason_code, properties):
+    """Callback when connected to MQTT broker"""
+    if reason_code == 0:
+        print("Connected to HiveMQ Cloud!")
+        client.subscribe([(MQTT_TOPIC_PAIRING, 0), (MQTT_TOPIC_REGISTER, 0)])
+    else:
+        print(f"Failed to connect, reason: {reason_code}")
+
 def on_message(client, userdata, message):
     payload = json.loads(message.payload.decode())
     print(f"Received MQTT from HiveMQ: {payload}")
@@ -62,8 +73,21 @@ def on_message(client, userdata, message):
         device_type = payload.get("type")
         print(f"ESP32 Registered: MAC={device_mac}, TYPE={device_type}")
 
-client = mqtt.Client()
+# Create MQTT client with API version 2
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+
+# Set authentication (username & password)
+client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+# Enable TLS for secure connection
+client.tls_set()  # Dùng chứng chỉ mặc định của hệ thống
+
+# Set callback functions
+client.on_connect = on_connect
 client.on_message = on_message
-client.connect(MQTT_BROKER, 1883)
-client.subscribe([(MQTT_TOPIC_PAIRING, 0), (MQTT_TOPIC_REGISTER, 0)])
+
+# Connect to MQTT broker
+client.connect(MQTT_BROKER, MQTT_PORT)
+
+# Start MQTT loop
 client.loop_forever()
