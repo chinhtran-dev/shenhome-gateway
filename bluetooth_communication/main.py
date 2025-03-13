@@ -1,9 +1,16 @@
-import bluetooth
+import asyncio
 import json
 import os
 import time
+from bleak import BleakServer
 
-def connect_wifi(ssid, password):
+# Custom BLE service & characteristic UUIDs
+SERVICE_UUID = "550e8400-e29b-41d4-a716-446655440000"
+CHARACTERISTIC_UUID = "6fa459ea-ee8a-3ca4-894e-db77e160355e"
+
+ssid_password_data = None
+
+async def connect_wifi(ssid, password):
     """Use nmcli to connect to Wi-Fi on Raspberry Pi."""
     print(f"Connecting to Wi-Fi: {ssid}")
 
@@ -20,56 +27,42 @@ def connect_wifi(ssid, password):
     else:
         print("Failed to connect to Wi-Fi.")
 
-def start_bluetooth_server():
-    """Start a Bluetooth server to receive SSID and Password from a phone."""
-    server_socket = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-    server_socket.bind(("", bluetooth.PORT_ANY))
-    server_socket.listen(1)
-
-    port = server_socket.getsockname()[1]
-    bluetooth.advertise_service(server_socket, "SSIDPassServer",
-                                service_classes=[bluetooth.SERIAL_PORT_CLASS],
-                                profiles=[bluetooth.SERIAL_PORT_PROFILE])
-
-    print(f"Waiting for connection on RFCOMM channel {port}...")
-
-    client_socket, client_info = server_socket.accept()
-    print(f"Connected to {client_info}")
-
+def on_write(value: bytearray):
+    """Callback function triggered when mobile app writes data to BLE characteristic."""
+    global ssid_password_data
+    data_str = value.decode("utf-8")
+    
     try:
+        received_data = json.loads(data_str)
+        ssid = received_data.get("ssid")
+        password = received_data.get("password")
+        user_id = received_data.get("userId")
+
+        print(f"Received: SSID={ssid}, Password={password}, UserID={user_id}")
+        
+        ssid_password_data = (ssid, password)
+    except json.JSONDecodeError:
+        print("Invalid JSON received.")
+
+async def start_ble_server():
+    """Start a BLE GATT server using Bleak."""
+    global ssid_password_data
+    
+    async with BleakServer() as server:
+        service = server.add_new_service(SERVICE_UUID)
+        characteristic = service.add_new_characteristic(
+            CHARACTERISTIC_UUID,
+            ["write"],  # Allows writing from mobile app
+            on_write
+        )
+        print(f"BLE server started. Waiting for connection...")
+
         while True:
-            data = client_socket.recv(1024).decode().strip()
-            if not data:
-                break
-            
-            print(f"Received: {data}")
-
-            # Parse JSON data
-            try:
-                received_data = json.loads(data)
-                ssid = received_data.get("ssid")
-                password = received_data.get("password")
-                user_id = received_data.get("userId")
-
-                print(f"SSID: {ssid}, Password: {password}, UserID: {user_id}")
-
-                # Send acknowledgment to the phone
-                client_socket.send("Data received.".encode())
-
-                # Connect to Wi-Fi
-                connect_wifi(ssid, password)
-
-            except json.JSONDecodeError:
-                print("Invalid JSON received.")
-                client_socket.send("Invalid JSON format.".encode())
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-    finally:
-        print("Closing connection...")
-        client_socket.close()
-        server_socket.close()
+            await asyncio.sleep(1)  # Keep the loop running
+            if ssid_password_data:
+                ssid, password = ssid_password_data
+                await connect_wifi(ssid, password)
+                ssid_password_data = None  # Reset after handling
 
 if __name__ == "__main__":
-    start_bluetooth_server()
+    asyncio.run(start_ble_server())
