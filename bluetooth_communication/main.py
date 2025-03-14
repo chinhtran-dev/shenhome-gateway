@@ -7,10 +7,9 @@ import bluetooth
 def run_bluetoothctl_command(command):
     """Runs a bluetoothctl command and returns output"""
     process = Popen(["bluetoothctl"], stdin=PIPE, stdout=PIPE, stderr=PIPE, text=True)
-    process.stdin.write(command + "\n")
-    process.stdin.close()
-    output, _ = process.communicate()
+    output, _ = process.communicate(input=command + "\n")
     return output
+
 
 def connect_wifi(ssid, password):
     """Connects to Wi-Fi using nmcli on Raspberry Pi"""
