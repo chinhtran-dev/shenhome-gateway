@@ -46,8 +46,8 @@ def on_connect(client, userdata, flags, rc):
     try:
         print(f"Connected to MQTT broker with code {rc}")
         gateway_mac = get_gateway_mac()
-        client.subscribe(f"gateway/{gateway_mac}/automation")
-        print(f"Subscribed to topic: gateway/{gateway_mac}/automation")
+        client.subscribe(f"gateway/{gateway_mac}/create_automation")
+        print(f"Subscribed to topic: gateway/{gateway_mac}/create_automation")
     except Exception as e:
         print(f"Failed to subscribe: {e}")
         client.loop_stop()
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, 60)
         client.loop_forever()
-        print("Listening on dynamic topics (gateway/{gateway_mac}/automation)")
+        print("Listening on dynamic topics (gateway/{gateway_mac}/create_automation)")
     except Exception as e:
         print(f"Failed to connect to MQTT broker: {e}")
         client.loop_stop()
