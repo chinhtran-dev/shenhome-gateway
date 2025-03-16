@@ -232,17 +232,10 @@ return null;
     return func
 
 if __name__ == "__main__":
-    # Initialize MQTT client
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    client.tls_set()
     client.on_connect = on_connect
     client.on_message = on_message
-
-    # Connect to MQTT broker
-    try:
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
-        client.loop_forever()
-        print("Listening on dynamic topics (gateway/{gateway_mac}/create_automation)")
-    except Exception as e:
-        print(f"Failed to connect to MQTT broker: {e}")
-        client.loop_stop()
-        client.disconnect()
+    client.connect(MQTT_BROKER, MQTT_PORT)
+    client.loop_forever()
