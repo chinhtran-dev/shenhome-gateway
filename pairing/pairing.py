@@ -23,7 +23,7 @@ def get_wifi_credentials():
         password = subprocess.check_output(cmd, shell=True).decode().strip()
         return ssid, password
     except Exception:
-        return "UnknownSSID", "UnknownPassword"
+        return "Emyeucogiao", "hoicoemdi1227"
 
 def get_ip_address():
     """Retrieve the current IP address."""
