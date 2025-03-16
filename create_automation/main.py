@@ -22,7 +22,7 @@ def get_gateway_mac():
         if not mac or mac.lower() == "00:00:00:00:00:00":
             raise Exception(f"Invalid MAC address for interface {target_interface}")
 
-        mac = mac.replace(":", "").lower()
+        mac = mac.lower()
         return mac
     except Exception as e:
         print(f"Error getting gateway MAC: {e}")
