@@ -231,7 +231,7 @@ return null;
 
 if __name__ == "__main__":
     # Initialize MQTT client
-    client = mqtt.Client()
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect
     client.on_message = on_message
 
