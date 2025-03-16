@@ -9,8 +9,7 @@ MQTT_BROKER = os.getenv("MQTT_BROKER", "default-broker")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 8883))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "default-user")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "default-password")
-MQTT_TOPIC_PAIRING = "pairing"
-MQTT_TOPIC_REGISTER = "register"
+MQTT_TOPIC_PAIRING = "shenhome/pairing"
 
 # UDP Configuration
 UDP_IP = "255.255.255.255"
@@ -53,8 +52,7 @@ def on_message(client, userdata, message):
         udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         udp_socket.sendto(udp_data.encode(), (UDP_IP, UDP_PORT))
         print(f"Sent UDP Broadcast: SSID={ssid}, IP={pi_ip}")
-    elif message.topic == MQTT_TOPIC_REGISTER:
-        print(f"ESP32 Registered: MAC={payload.get('mac')}, TYPE={payload.get('type')}")
+
 
 # MQTT Client Setup
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
