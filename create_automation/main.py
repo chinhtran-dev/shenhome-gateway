@@ -10,6 +10,8 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", "default-user")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "default-password")
 NODE_RED_URL = "http://localhost:1880"
 NODE_RED_GROUP = "Automations"
+NODE_RED_USERNAME = os.getenv("NODERED_USERNAME", "admin")
+NODE_RED_PASSWORD = os.getenv("NODERED_PASSWORD", "admin")
 
 def get_gateway_mac():
     """Gets the MAC address of the default gateway"""
@@ -152,12 +154,35 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
     }
 
     # Send request to Node-RED API
-    headers = {"Content-Type": "application/json"}
-    response = requests.post(f"{NODE_RED_URL}/flows", json=flow_config, headers=headers)
-    if response.status_code == 200:
-        print(f"Flow for {automation['id']} created successfully for gateway {gateway_mac}")
+    auth_payload = {
+        "client_id": "node-red-editor",
+        "grant_type": "password",
+        "scope": "*",
+        "username": NODE_RED_USERNAME,
+        "password": NODE_RED_PASSWORD
+    }
+
+    token_response = requests.post(f"{NODE_RED_URL}/auth/token", json=auth_payload)
+
+    if token_response.status_code == 200:
+        access_token = token_response.json().get("access_token")
+        print(f"Access Token: {access_token}")
+
+        # Gửi request để tạo flow
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        response = requests.post(f"{NODE_RED_URL}/flows", json=flow_config, headers=headers)
+
+        if response.status_code == 200:
+            print("Flow created successfully")
+        else:
+            print(f"Failed to create flow: {response.status_code} - {response.text}")
+
     else:
-        print(f"Failed to create flow: {response.status_code} - {response.text}")
+        print(f"Failed to get access token: {token_response.status_code} - {token_response.text}")
 
 def generate_logic_function(automation):
     func = """
