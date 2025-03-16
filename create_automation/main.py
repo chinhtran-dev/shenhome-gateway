@@ -1,11 +1,13 @@
 import json
+import os
 import requests
 import netifaces
 from paho.mqtt import client as mqtt
-import time
 
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
+MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", 8883))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "default-user")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "default-password")
 NODE_RED_URL = "http://localhost:1880"
 NODE_RED_GROUP = "Automations"
 
