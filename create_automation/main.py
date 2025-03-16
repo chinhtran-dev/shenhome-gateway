@@ -42,7 +42,7 @@ def get_node_red_tab():
         print(f"Error getting Node-RED tabs: {e}")
         return "main_tab"
     
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties):
     try:
         print(f"Connected to MQTT broker with code {rc}")
         gateway_mac = get_gateway_mac()
