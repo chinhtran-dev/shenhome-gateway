@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 MQTT_BROKER = os.getenv("MQTT_BROKER", "default-broker")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 8883))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "default-user")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWD", "default-password")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "default-password")
 MQTT_TOPIC_PAIRING = "pairing"
 MQTT_TOPIC_REGISTER = "register"
 
@@ -37,7 +37,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     """Callback when connected to MQTT broker."""
     if reason_code == 0:
         print("Connected to HiveMQ Cloud!")
-        client.subscribe([(MQTT_TOPIC_PAIRING, 0), (MQTT_TOPIC_REGISTER, 0)])
+        client.subscribe([(MQTT_TOPIC_PAIRING, 0)])
     else:
         print(f"Failed to connect, reason: {reason_code}")
 
