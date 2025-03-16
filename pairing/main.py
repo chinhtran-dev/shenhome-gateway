@@ -55,10 +55,11 @@ def on_message(client, userdata, message):
 
 
 # MQTT Client Setup
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-client.tls_set()
-client.on_connect = on_connect
-client.on_message = on_message
-client.connect(MQTT_BROKER, MQTT_PORT)
-client.loop_forever()
+if __name__ == "__main__":
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    client.tls_set()
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect(MQTT_BROKER, MQTT_PORT)
+    client.loop_forever()
