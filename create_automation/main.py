@@ -81,7 +81,7 @@ def create_node_red_flow(automation, gateway_mac):
     nodes = []
     
     auth_payload = {
-        "client_id": "admin",
+        "client_id": "node-red-editor",
         "grant_type": "password",
         "scope": "*",
         "username": NODE_RED_USERNAME,
