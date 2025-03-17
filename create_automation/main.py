@@ -9,7 +9,6 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", 8883))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 NODE_RED_URL = "http://localhost:1880"
-NODE_RED_GROUP = "Automations"
 NODE_RED_USERNAME = os.getenv("NODERED_USERNAME")
 NODE_RED_PASSWORD = os.getenv("NODERED_PASSWORD")
 
@@ -76,8 +75,7 @@ def get_mqtt_broker(access_token):
     except Exception as e:
         print(f"Error getting Node-RED tabs: {e}")
         return "main_tab"
-        
-        
+    
 def create_node_red_flow(automation, gateway_mac):
     nodes = []
     
@@ -180,7 +178,7 @@ def create_node_red_flow(automation, gateway_mac):
     # Create flow for the automation
     flow_config = {
         "id": automation["id"],
-        "label": NODE_RED_GROUP,
+        "label": automation["name"],
         "nodes": nodes + mqtt_ins + out_nodes,
         "configs": {},
     }
