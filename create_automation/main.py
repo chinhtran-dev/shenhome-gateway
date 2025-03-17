@@ -59,26 +59,6 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Error processing message: {e}")
         
-def get_mqtt_config(access_token):
-    try:
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}"
-        }
-        tabs_response = requests.get(f"{NODE_RED_URL}/flows", headers=headers)
-        if tabs_response.status_code == 200:
-            flows = tabs_response.json()
-            node_red_tab = next(
-                (f["id"] for f in flows if "type" in f and f["type"] == "mqtt-broker" and "label" in f and f["name"] == "mosquitto"),
-                "main_tab"
-            )            
-            return node_red_tab
-        else:
-            print(f"Failed to get tabs: {tabs_response.status_code} - {tabs_response.text}")
-            return "main_tab"
-    except Exception as e:
-        print(f"Error getting Node-RED tabs: {e}")
-        return "main_tab"
         
 def create_node_red_flow(automation, gateway_mac):
     nodes = []
@@ -177,25 +157,12 @@ def create_node_red_flow(automation, gateway_mac):
             "env": {}
         })
 
-    
-    mqtt_config_id = get_mqtt_config(access_token)
-    
-    configs = [
-        {
-            "id": mqtt_config_id,
-            "type": "mqtt-broker",
-            "name": "mosquitto",
-            "broker": "mosquitto",
-            "port": 1883,
-        }
-    ]
-
     # Create flow for the automation
     flow_config = {
         "id": automation["id"],
         "label": NODE_RED_GROUP,
-        "nodes": nodes + mqtt_ins,
-        "configs": configs,
+        "nodes": nodes + mqtt_ins + out_nodes,
+        "configs": {},
     }
     
     headers = {
