@@ -78,7 +78,7 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
     nodes = []
 
     # 1. cron-plus for time trigger
-    time_trigger = next((t for t in automation["triggers"] if t["type"] == "time"), None)
+    time_trigger = next((t for t in automation["triggers"] if t["type"] == 2), None)
     if time_trigger:
         nodes.append({
             "id": f"cron_{automation['id']}",
@@ -86,14 +86,12 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
             "z": node_red_tab,
             "name": f"Cron {automation['name']}",
             "outputAsObject": False,
-            "schedule": time_trigger["value"],
-            "x": 100,
-            "y": 100,
+            "schedule": time_trigger["expression"][0],
             "wires": [[f"logic_{automation['id']}"]]
         })
 
     # 2. mqtt-in for each device trigger
-    device_triggers = [t for t in automation["triggers"] if t["type"] == "device"]
+    device_triggers = [t for t in automation["triggers"] if t["type"] == 1]
     mqtt_nodes = []
     for i, trigger in enumerate(device_triggers):
         mqtt_node_id = f"mqtt_in_{automation['id']}_{i}"
@@ -101,13 +99,11 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
             "id": mqtt_node_id,
             "type": "mqtt in",
             "z": node_red_tab,
-            "name": f"MQTT {trigger['device_mac']}",
-            "topic": trigger["device_mac"],
+            "name": f"MQTT {trigger['mac']}",
+            "topic": trigger["mac"],
             "qos": "0",
             "datatype": "auto",
-            "broker": "mosquitto_broker",
-            "x": 100,
-            "y": 150 + i * 50,
+            "broker": "mosquitto",
             "wires": [[f"logic_{automation['id']}"]]
         })
 
@@ -121,8 +117,6 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
         "func": generate_logic_function(automation),
         "outputs": len(automation["actions"]),
         "noerr": 0,
-        "x": 400,
-        "y": 100,
         "wires": [[f"mqtt_out_{automation['id']}" for _ in automation["actions"]]]
     })
 
@@ -135,9 +129,7 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
         "topic": "",
         "qos": "0",
         "retain": "",
-        "broker": "mosquitto_broker",
-        "x": 600,
-        "y": 100,
+        "broker": "mosquitto",
         "wires": []
     })
 
@@ -191,23 +183,23 @@ const deviceTriggers = {};
 const automation = {automation_json};
 
 // Handle device trigger
-if (msg.topic && automation.triggers.some(t => t.type === "device" && t.device_mac === msg.topic)) {
-    const trigger = automation.triggers.find(t => t.type === "device" && t.device_mac === msg.topic);
+if (msg.topic && automation.triggers.some(t => t.type === "device" && t.mac === msg.topic)) {
+    const trigger = automation.triggers.find(t => t.type === "device" && t.mac === msg.topic);
     const deviceData = msg.payload;
-    if (!deviceData || !deviceData[trigger.field]) return null;
+    if (!deviceData || !deviceData[trigger.property]) return null;
 
-    const deviceValue = deviceData[trigger.field];
+    const deviceValue = deviceData[trigger.property];
     const conditionValue = parseFloat(trigger.value);
     let deviceTriggerSatisfied = false;
 
-    switch (trigger.condition) {
+    switch (trigger.operator) {
         case ">": deviceTriggerSatisfied = deviceValue > conditionValue; break;
         case "<": deviceTriggerSatisfied = deviceValue < conditionValue; break;
         case "=": deviceTriggerSatisfied = deviceValue == conditionValue; break;
         default: deviceTriggerSatisfied = false;
     }
 
-    global.set(`deviceTrigger_${automation.id}_${trigger.device_mac}`, {
+    global.set(`deviceTrigger_${automation.id}_${trigger.mac}`, {
         satisfied: deviceTriggerSatisfied,
         timestamp: Date.now()
     });
@@ -219,15 +211,15 @@ if (automation.isOnce && global.get(`executed_${automation.id}`)) {
     return null;
 }
 
-const timeTriggerSatisfied = automation.triggers.some(t => t.type === "time"); // Cron đã kích hoạt
+const timeTriggerSatisfied = automation.triggers.some(t => t.type === "time");
 let deviceTriggersSatisfied = [];
 
 automation.triggers.forEach(trigger => {
     if (trigger.type === "device") {
-        const state = global.get(`deviceTrigger_${automation.id}_${trigger.device_mac}`) || { satisfied: false };
+        const state = global.get(`deviceTrigger_${automation.id}_${trigger.mac}`) || { satisfied: false };
         const timeout = 5 * 60 * 1000; // 5 phút
         if (Date.now() - (state.timestamp || 0) > timeout) {
-            global.set(`deviceTrigger_${automation.id}_${trigger.device_mac}`, { satisfied: false, timestamp: Date.now() });
+            global.set(`deviceTrigger_${automation.id}_${trigger.mac}`, { satisfied: false, timestamp: Date.now() });
             deviceTriggersSatisfied.push(false);
         } else {
             deviceTriggersSatisfied.push(state.satisfied);
@@ -236,15 +228,15 @@ automation.triggers.forEach(trigger => {
 });
 
 let allTriggersSatisfied = false;
-if (automation.logic === "AND") {
+if (automation.isMatchAll) {
     allTriggersSatisfied = timeTriggerSatisfied && deviceTriggersSatisfied.every(s => s);
-} else if (automation.logic === "OR") {
+} else {
     allTriggersSatisfied = timeTriggerSatisfied || deviceTriggersSatisfied.some(s => s);
 }
 
 if (allTriggersSatisfied) {
     const messages = automation.actions.map(action => ({
-        topic: "device/" + action.device_mac + "/command",
+        topic: "device/" + action.mac + "/command",
         payload: action.command
     }));
     if (automation.isOnce) {
