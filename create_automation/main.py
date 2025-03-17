@@ -32,9 +32,13 @@ def get_gateway_mac():
         print(f"Error getting gateway MAC: {e}")
         raise Exception("Failed to retrieve a valid gateway MAC address")
 
-def get_node_red_tab():
+def get_node_red_tab(access_token):
     try:
-        tabs_response = requests.get(f"{NODE_RED_URL}/flows", headers={"Content-Type": "application/json"})
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        tabs_response = requests.get(f"{NODE_RED_URL}/flows", headers=headers)
         if tabs_response.status_code == 200:
             flows = tabs_response.json()
             node_red_tab = next((f["id"] for f in flows if "type" in f and f["type"] == "tab"), "main_tab")
@@ -63,19 +67,35 @@ def on_message(client, userdata, msg):
         print(f"Received payload: {json.dumps(payload, indent=2)}")
         
         gateway_mac = get_gateway_mac()
-        node_red_tab = get_node_red_tab()
         
         time_triggers = [t for t in payload["triggers"] if t["type"] == "time"]
         if len(time_triggers) > 1:
             print("Error: Only one time trigger is allowed")
             return
         
-        create_node_red_flow(payload, gateway_mac, node_red_tab)
+        create_node_red_flow(payload, gateway_mac)
     except Exception as e:
         print(f"Error processing message: {e}")
         
-def create_node_red_flow(automation, gateway_mac, node_red_tab):
+def create_node_red_flow(automation, gateway_mac):
     nodes = []
+    
+    auth_payload = {
+        "client_id": "node-red-editor",
+        "grant_type": "password",
+        "scope": "*",
+        "username": NODE_RED_USERNAME,
+        "password": NODE_RED_PASSWORD
+    }
+
+    token_response = requests.post(f"{NODE_RED_URL}/auth/token", json=auth_payload)
+    if token_response.status_code != 200:
+        print(f"Failed to get access token: {token_response.status_code} - {token_response.text}")
+        return
+
+    access_token = token_response.json().get("access_token")
+
+    node_red_tab = get_node_red_tab(access_token)
 
     # 1. cron-plus for time trigger
     time_trigger = next((t for t in automation["triggers"] if t["type"] == 2), None)
@@ -145,36 +165,17 @@ def create_node_red_flow(automation, gateway_mac, node_red_tab):
         }
     }
 
-    # Send request to Node-RED API
-    auth_payload = {
-        "client_id": "node-red-editor",
-        "grant_type": "password",
-        "scope": "*",
-        "username": NODE_RED_USERNAME,
-        "password": NODE_RED_PASSWORD
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}"
     }
-
-    token_response = requests.post(f"{NODE_RED_URL}/auth/token", json=auth_payload)
-
-    if token_response.status_code == 200:
-        access_token = token_response.json().get("access_token")
-        print(f"Access Token: {access_token}")
-
-        # Gửi request để tạo flow
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}"
-        }
         
-        response = requests.post(f"{NODE_RED_URL}/flows", json=flow_config, headers=headers)
+    response = requests.post(f"{NODE_RED_URL}/flows", json=flow_config, headers=headers)
 
-        if response.status_code == 200:
-            print("Flow created successfully")
-        else:
-            print(f"Failed to create flow: {response.status_code} - {response.text}")
-
+    if response.status_code == 200:
+        print("Flow created successfully")
     else:
-        print(f"Failed to get access token: {token_response.status_code} - {token_response.text}")
+        print(f"Failed to create flow: {response.status_code} - {response.text}")
 
 def generate_logic_function(automation):
     func = """
