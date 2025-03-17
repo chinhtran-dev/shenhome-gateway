@@ -81,7 +81,7 @@ def create_node_red_flow(automation, gateway_mac):
     nodes = []
     
     auth_payload = {
-        "client_id": "node-red-editor",
+        "client_id": "admin",
         "grant_type": "password",
         "scope": "*",
         "username": NODE_RED_USERNAME,
@@ -183,68 +183,64 @@ def generate_logic_function(automation):
 const deviceTriggers = {};
 const automation = {automation_json};
 
-// Handle device trigger
-if (msg.topic && automation.triggers.some(t => t.type === "device" && t.mac === msg.topic)) {
-    const trigger = automation.triggers.find(t => t.type === "device" && t.mac === msg.topic);
+// Handle device trigger (type == 1)
+if (msg.topic && automation.triggers.some(t => t.type === 1 && t.mac === msg.topic)) {{
+    const trigger = automation.triggers.find(t => t.type === 1 && t.mac === msg.topic);
     const deviceData = msg.payload;
-    if (!deviceData || !deviceData[trigger.property]) return null;
+    if (!deviceData || !deviceData[trigger.field]) return null;
 
-    const deviceValue = deviceData[trigger.property];
+    const deviceValue = deviceData[trigger.field];
     const conditionValue = parseFloat(trigger.value);
     let deviceTriggerSatisfied = false;
 
-    switch (trigger.operator) {
+    switch (trigger.condition) {{
         case ">": deviceTriggerSatisfied = deviceValue > conditionValue; break;
         case "<": deviceTriggerSatisfied = deviceValue < conditionValue; break;
         case "=": deviceTriggerSatisfied = deviceValue == conditionValue; break;
         default: deviceTriggerSatisfied = false;
-    }
+    }}
 
-    global.set(`deviceTrigger_${automation.id}_${trigger.mac}`, {
+    global.set("deviceTrigger_" + automation.id + "_" + trigger.mac, {{
         satisfied: deviceTriggerSatisfied,
         timestamp: Date.now()
-    });
+    }});
     return null;
-}
+}}
 
-// Handle time trigger from cron-plus
-if (automation.isOnce && global.get(`executed_${automation.id}`)) {
+// Handle time trigger from cron-plus (type == 2)
+if (automation.isOnce && global.get("executed_" + automation.id)) {{
     return null;
-}
+}}
 
-const timeTriggerSatisfied = automation.triggers.some(t => t.type === "time");
+const timeTriggerSatisfied = automation.triggers.some(t => t.type === 2); // Cron đã kích hoạt
 let deviceTriggersSatisfied = [];
 
-automation.triggers.forEach(trigger => {
-    if (trigger.type === "device") {
-        const state = global.get(`deviceTrigger_${automation.id}_${trigger.mac}`) || { satisfied: false };
+automation.triggers.forEach(trigger => {{
+    if (trigger.type === 1) {{
+        const state = global.get("deviceTrigger_" + automation.id + "_" + trigger.mac) || {{ satisfied: false }};
         const timeout = 5 * 60 * 1000; // 5 phút
-        if (Date.now() - (state.timestamp || 0) > timeout) {
-            global.set(`deviceTrigger_${automation.id}_${trigger.mac}`, { satisfied: false, timestamp: Date.now() });
+        if (Date.now() - (state.timestamp || 0) > timeout) {{
+            global.set("deviceTrigger_" + automation.id + "_" + trigger.mac, {{ satisfied: false, timestamp: Date.now() }});
             deviceTriggersSatisfied.push(false);
-        } else {
+        }} else {{
             deviceTriggersSatisfied.push(state.satisfied);
-        }
-    }
-});
+        }}
+    }}
+}});
 
-let allTriggersSatisfied = false;
-if (automation.isMatchAll) {
-    allTriggersSatisfied = timeTriggerSatisfied && deviceTriggersSatisfied.every(s => s);
-} else {
-    allTriggersSatisfied = timeTriggerSatisfied || deviceTriggersSatisfied.some(s => s);
-}
+// Giả định logic là "AND"
+let allTriggersSatisfied = timeTriggerSatisfied && deviceTriggersSatisfied.every(s => s);
 
-if (allTriggersSatisfied) {
-    const messages = automation.actions.map(action => ({
+if (allTriggersSatisfied) {{
+    const messages = automation.actions.map(action => ({{
         topic: "device/" + action.mac + "/command",
-        payload: action.command
-    }));
-    if (automation.isOnce) {
-        global.set(`executed_${automation.id}`, true);
-    }
+        payload: JSON.stringify({{ [action.property]: action.value }})
+    }}));
+    if (automation.isOnce) {{
+        global.set("executed_" + automation.id, true);
+    }}
     return messages;
-}
+}}
 return null;
 """.format(automation_json=json.dumps(automation))
     return func
