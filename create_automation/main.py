@@ -59,6 +59,24 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Error processing message: {e}")
         
+def get_mqtt_broker(access_token):
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        tabs_response = requests.get(f"{NODE_RED_URL}/flows", headers=headers)
+        if tabs_response.status_code == 200:
+            flows = tabs_response.json()
+            node_red_tab = next((f["id"] for f in flows if "type" in f and f["type"] == "mqtt-broker" and f["name"] == "mosquitto"))
+            return node_red_tab
+        else:
+            print(f"Failed to get tabs: {tabs_response.status_code} - {tabs_response.text}")
+            return "main_tab"
+    except Exception as e:
+        print(f"Error getting Node-RED tabs: {e}")
+        return "main_tab"
+        
         
 def create_node_red_flow(automation, gateway_mac):
     nodes = []
@@ -77,6 +95,8 @@ def create_node_red_flow(automation, gateway_mac):
         return
 
     access_token = token_response.json().get("access_token")
+    
+    mqtt_broker_id = get_mqtt_broker(access_token)
     
     # 1. cron-plus for time trigger
     time_trigger = next((t for t in automation["triggers"] if t["type"] == 2), None)
@@ -120,7 +140,7 @@ def create_node_red_flow(automation, gateway_mac):
             "topic": trigger["mac"],
             "qos": "0",
             "datatype": "auto",
-            "broker": "mosquitto",
+            "broker": mqtt_broker_id,
             "wires": [[f"logic_{automation['id']}"]],
             "env": {}
         })
@@ -152,7 +172,7 @@ def create_node_red_flow(automation, gateway_mac):
             "qos": "0",
             "contentType": "application/json",
             "retain": "",
-            "broker": "mosquitto",
+            "broker": mqtt_broker_id,
             "wires": [],
             "env": {}
         })
