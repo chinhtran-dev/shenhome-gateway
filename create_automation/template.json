@@ -1,0 +1,101 @@
+[
+    {
+        "id": "cron_67d79ea21d7e51e8b29498d0",
+        "type": "cronplus",
+        "z": "eccb3afa8e39b13d",
+        "name": "Cron test",
+        "outputField": "",
+        "timeZone": "Asia/Ho_Chi_Minh",
+        "storeName": "",
+        "commandResponseMsgOutput": "output1",
+        "defaultLocation": "",
+        "defaultLocationType": "default",
+        "outputs": 1,
+        "options": [
+            {
+                "name": "schedule1",
+                "topic": "topic1",
+                "payloadType": "default",
+                "payload": "",
+                "expressionType": "cron",
+                "expression": "0 15 * * *",
+                "location": "",
+                "offset": "0",
+                "solarType": "all",
+                "solarEvents": "sunrise,sunset"
+            }
+        ],
+        "x": 200,
+        "y": 60,
+        "wires": [
+            [
+                "logic_67d79ea21d7e51e8b29498d0"
+            ]
+        ]
+    },
+    {
+        "id": "logic_67d79ea21d7e51e8b29498d0",
+        "type": "function",
+        "z": "eccb3afa8e39b13d",
+        "name": "Logic test",
+        "func": "\n// Save trigger state to global context\nconst deviceTriggers = {};\nconst automation = {\"isOnce\": false, \"isMatchAll\": true, \"triggers\": [{\"type\": 2, \"name\": \"test\", \"expression\": [\"0-59 22 * * *\", \"0 23 * * *\"]}], \"actions\": [{\"type\": 0, \"name\": \"alert\", \"mac\": \"AA:BB:CC:BB:EE:FF\", \"property\": \"status\", \"value\": 2}], \"name\": \"test\", \"id\": \"67d79ea21d7e51e8b29498d0\"};\n\n// Handle device trigger (type == 1)\nif (msg.topic && automation.triggers.some(t => t.type === 1 && t.mac === msg.topic)) {\n    const trigger = automation.triggers.find(t => t.type === 1 && t.mac === msg.topic);\n    const deviceData = msg.payload;\n    if (!deviceData || !deviceData[trigger.field]) return null;\n\n    const deviceValue = deviceData[trigger.field];\n    const conditionValue = parseFloat(trigger.value);\n    let deviceTriggerSatisfied = false;\n\n    switch (trigger.condition) {\n        case \">\": deviceTriggerSatisfied = deviceValue > conditionValue; break;\n        case \"<\": deviceTriggerSatisfied = deviceValue < conditionValue; break;\n        case \"=\": deviceTriggerSatisfied = deviceValue == conditionValue; break;\n        default: deviceTriggerSatisfied = false;\n    }\n\n    global.set(\"deviceTrigger_\" + automation.id + \"_\" + trigger.mac, {\n        satisfied: deviceTriggerSatisfied,\n        timestamp: Date.now()\n    });\n    return null;\n}\n\n// Handle time trigger from cron-plus (type == 2)\nif (automation.isOnce && global.get(\"executed_\" + automation.id)) {\n    return null;\n}\n\nconst timeTriggerSatisfied = automation.triggers.some(t => t.type === 2); // Cron đã kích hoạt\nlet deviceTriggersSatisfied = [];\n\nautomation.triggers.forEach(trigger => {\n    if (trigger.type === 1) {\n        const state = global.get(\"deviceTrigger_\" + automation.id + \"_\" + trigger.mac) || { satisfied: false };\n        const timeout = 5 * 60 * 1000; // 5 phút\n        if (Date.now() - (state.timestamp || 0) > timeout) {\n            global.set(\"deviceTrigger_\" + automation.id + \"_\" + trigger.mac, { satisfied: false, timestamp: Date.now() });\n            deviceTriggersSatisfied.push(false);\n        } else {\n            deviceTriggersSatisfied.push(state.satisfied);\n        }\n    }\n});\n\n// Logic dựa trên isMatchAll\nlet allTriggersSatisfied;\nif (automation.isMatchAll === false) {\n    allTriggersSatisfied = timeTriggerSatisfied || (deviceTriggersSatisfied.length > 0 && deviceTriggersSatisfied.some(s => s));\n} else {\n    allTriggersSatisfied = timeTriggerSatisfied && deviceTriggersSatisfied.every(s => s);\n}\n\nif (allTriggersSatisfied) {\n    const messages = automation.actions.map(action => {\n        const payloadObj = {};\n        payloadObj[action.property] = action.value;\n        return {\n            topic: \"device/\" + action.mac + \"/command\",\n            payload: JSON.stringify(payloadObj)\n        };\n    });\n    if (automation.isOnce) {\n        global.set(\"executed_\" + automation.id, true);\n    }\n    return messages;\n}\nreturn null;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 160,
+        "y": 260,
+        "wires": [
+            [
+                "mqtt_out_67d79ea21d7e51e8b29498d0"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_out_67d79ea21d7e51e8b29498d0",
+        "type": "mqtt out",
+        "z": "eccb3afa8e39b13d",
+        "name": "MQTT Out test",
+        "topic": "mac",
+        "qos": "0",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "f85f19ceb556f2d7",
+        "x": 600,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "f85f19ceb556f2d7",
+        "type": "mqtt-broker",
+        "name": "mosquitto",
+        "broker": "mosquitto",
+        "port": 1883,
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "5",
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]

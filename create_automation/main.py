@@ -4,14 +4,14 @@ import requests
 import netifaces
 from paho.mqtt import client as mqtt
 
-MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
+MQTT_BROKER = os.getenv("MQTT_BROKER")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 8883))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME", "default-user")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "default-password")
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 NODE_RED_URL = "http://localhost:1880"
 NODE_RED_GROUP = "Automations"
-NODE_RED_USERNAME = os.getenv("NODERED_USERNAME", "admin")
-NODE_RED_PASSWORD = os.getenv("NODERED_PASSWORD", "admin")
+NODE_RED_USERNAME = os.getenv("NODERED_USERNAME")
+NODE_RED_PASSWORD = os.getenv("NODERED_PASSWORD")
 
 def get_gateway_mac():
     """Gets the MAC address of the default gateway"""
@@ -31,24 +31,6 @@ def get_gateway_mac():
     except Exception as e:
         print(f"Error getting gateway MAC: {e}")
         raise Exception("Failed to retrieve a valid gateway MAC address")
-
-def get_node_red_tab(access_token):
-    try:
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}"
-        }
-        tabs_response = requests.get(f"{NODE_RED_URL}/flows", headers=headers)
-        if tabs_response.status_code == 200:
-            flows = tabs_response.json()
-            node_red_tab = next((f["id"] for f in flows if "type" in f and f["type"] == "tab"), "main_tab")
-            return node_red_tab
-        else:
-            print(f"Failed to get tabs: {tabs_response.status_code} - {tabs_response.text}")
-            return "main_tab"
-    except Exception as e:
-        print(f"Error getting Node-RED tabs: {e}")
-        return "main_tab"
     
 def on_connect(client, userdata, flags, rc, properties):
     try:
@@ -77,6 +59,27 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Error processing message: {e}")
         
+def get_mqtt_config(access_token):
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        tabs_response = requests.get(f"{NODE_RED_URL}/flows", headers=headers)
+        if tabs_response.status_code == 200:
+            flows = tabs_response.json()
+            node_red_tab = next(
+                (f["id"] for f in flows if "type" in f and f["type"] == "mqtt-broker" and "label" in f and f["name"] == "mosquitto"),
+                "main_tab"
+            )            
+            return node_red_tab
+        else:
+            print(f"Failed to get tabs: {tabs_response.status_code} - {tabs_response.text}")
+            return "main_tab"
+    except Exception as e:
+        print(f"Error getting Node-RED tabs: {e}")
+        return "main_tab"
+        
 def create_node_red_flow(automation, gateway_mac):
     nodes = []
     
@@ -94,83 +97,113 @@ def create_node_red_flow(automation, gateway_mac):
         return
 
     access_token = token_response.json().get("access_token")
-
-    node_red_tab = get_node_red_tab(access_token)
-
+    
     # 1. cron-plus for time trigger
     time_trigger = next((t for t in automation["triggers"] if t["type"] == 2), None)
     if time_trigger:
+        
+        options = [
+            {
+                "name": f"schedule{i+1}",
+                "topic": f"topic{i+1}",
+                "payloadType": "boolean",
+                "payload": True,
+                "expressionType": "cron",
+                "expression": expr,
+            }
+            for i, expr in enumerate(time_trigger["expression"])
+        ]
+        
         nodes.append({
             "id": f"cron_{automation['id']}",
-            "type": "cron-plus",
-            "z": node_red_tab,
+            "type": "cronplus",
+            "z": automation["id"],
             "name": f"Cron {automation['name']}",
-            "outputAsObject": False,
-            "schedule": time_trigger["expression"][0],
-            "wires": [[f"logic_{automation['id']}"]]
+            "timeZone": "Asia/Ho_Chi_Minh",
+            "commandResponseMsgOutput": "output1",
+            "outputs": 1,
+            "options": options,
+            "wires": [[f"logic_{automation['id']}"]],
+            "env": {}
         })
 
     # 2. mqtt-in for each device trigger
     device_triggers = [t for t in automation["triggers"] if t["type"] == 1]
-    mqtt_nodes = []
+    mqtt_ins = []
     for i, trigger in enumerate(device_triggers):
         mqtt_node_id = f"mqtt_in_{automation['id']}_{i}"
-        mqtt_nodes.append({
+        mqtt_ins.append({
             "id": mqtt_node_id,
             "type": "mqtt in",
-            "z": node_red_tab,
+            "z": automation["id"],
             "name": f"MQTT {trigger['mac']}",
             "topic": trigger["mac"],
             "qos": "0",
             "datatype": "auto",
             "broker": "mosquitto",
-            "wires": [[f"logic_{automation['id']}"]]
+            "wires": [[f"logic_{automation['id']}"]],
+            "env": {}
         })
 
 
-    # 4. Function for handle logic AND/OR
+    # Logic node
     nodes.append({
         "id": f"logic_{automation['id']}",
         "type": "function",
-        "z": node_red_tab,
+        "z": automation["id"],
         "name": f"Logic {automation['name']}",
         "func": generate_logic_function(automation),
         "outputs": len(automation["actions"]),
         "noerr": 0,
-        "wires": [[f"mqtt_out_{automation['id']}" for _ in automation["actions"]]]
+        "wires": [[f"out_{automation['id']}_{i}" for i in range(len(automation["actions"]))]],
+        "env": {}
     })
 
     # 5. MQTT Out
-    nodes.append({
-        "id": f"mqtt_out_{automation['id']}",
-        "type": "mqtt out",
-        "z": node_red_tab,
-        "name": f"MQTT Out {automation['name']}",
-        "topic": "",
-        "qos": "0",
-        "retain": "",
-        "broker": "mosquitto",
-        "wires": []
-    })
+    device_actions = [action for action in automation["actions"] if action["type"] == 0]
+    out_nodes = []
+    for i, action in enumerate(device_actions):
+        out_nodes.append({
+            "id": f"out_{automation['id']}_{i}",
+            "type": "mqtt out",
+            "z": automation["id"],
+            "name": f"MQTT Out {automation['name']}",
+            "topic": f"device/{action['mac']}/command",
+            "qos": "0",
+            "contentType": "application/json",
+            "retain": "",
+            "broker": "mosquitto",
+            "wires": [],
+            "env": {}
+        })
+
+    
+    mqtt_config_id = get_mqtt_config(access_token)
+    
+    configs = [
+        {
+            "id": mqtt_config_id,
+            "type": "mqtt-broker",
+            "name": "mosquitto",
+            "broker": "mosquitto",
+            "port": 1883,
+        }
+    ]
 
     # Create flow for the automation
     flow_config = {
-        "flows": nodes + mqtt_nodes,
-        "group": {
-            "id": "group_automations",
-            "name": NODE_RED_GROUP,
-            "type": "group",
-            "z": node_red_tab,
-            "nodes": [node["id"] for node in nodes + mqtt_nodes]
-        }
+        "id": automation["id"],
+        "label": NODE_RED_GROUP,
+        "nodes": nodes + mqtt_ins,
+        "configs": configs,
     }
-
+    
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
     }
         
-    response = requests.post(f"{NODE_RED_URL}/flows", json=flow_config, headers=headers)
+    response = requests.post(f"{NODE_RED_URL}/flow", json=flow_config, headers=headers)
 
     if response.status_code == 200:
         print("Flow created successfully")
@@ -178,13 +211,14 @@ def create_node_red_flow(automation, gateway_mac):
         print(f"Failed to create flow: {response.status_code} - {response.text}")
 
 def generate_logic_function(automation):
+    automation_json = json.dumps(automation)
     func = """
 // Save trigger state to global context
 const deviceTriggers = {};
-const automation = {automation_json};
+const automation = AUTOMATION_JSON;
 
 // Handle device trigger (type == 1)
-if (msg.topic && automation.triggers.some(t => t.type === 1 && t.mac === msg.topic)) {{
+if (msg.topic && automation.triggers.some(t => t.type === 1 && t.mac === msg.topic)) {
     const trigger = automation.triggers.find(t => t.type === 1 && t.mac === msg.topic);
     const deviceData = msg.payload;
     if (!deviceData || !deviceData[trigger.field]) return null;
@@ -193,56 +227,65 @@ if (msg.topic && automation.triggers.some(t => t.type === 1 && t.mac === msg.top
     const conditionValue = parseFloat(trigger.value);
     let deviceTriggerSatisfied = false;
 
-    switch (trigger.condition) {{
+    switch (trigger.condition) {
         case ">": deviceTriggerSatisfied = deviceValue > conditionValue; break;
         case "<": deviceTriggerSatisfied = deviceValue < conditionValue; break;
         case "=": deviceTriggerSatisfied = deviceValue == conditionValue; break;
         default: deviceTriggerSatisfied = false;
-    }}
+    }
 
-    global.set("deviceTrigger_" + automation.id + "_" + trigger.mac, {{
+    global.set("deviceTrigger_" + automation.id + "_" + trigger.mac, {
         satisfied: deviceTriggerSatisfied,
         timestamp: Date.now()
-    }});
+    });
     return null;
-}}
+}
 
 // Handle time trigger from cron-plus (type == 2)
-if (automation.isOnce && global.get("executed_" + automation.id)) {{
+if (automation.isOnce && global.get("executed_" + automation.id)) {
     return null;
-}}
+}
 
 const timeTriggerSatisfied = automation.triggers.some(t => t.type === 2); // Cron đã kích hoạt
 let deviceTriggersSatisfied = [];
 
-automation.triggers.forEach(trigger => {{
-    if (trigger.type === 1) {{
-        const state = global.get("deviceTrigger_" + automation.id + "_" + trigger.mac) || {{ satisfied: false }};
+automation.triggers.forEach(trigger => {
+    if (trigger.type === 1) {
+        const state = global.get("deviceTrigger_" + automation.id + "_" + trigger.mac) || { satisfied: false };
         const timeout = 5 * 60 * 1000; // 5 phút
-        if (Date.now() - (state.timestamp || 0) > timeout) {{
-            global.set("deviceTrigger_" + automation.id + "_" + trigger.mac, {{ satisfied: false, timestamp: Date.now() }});
+        if (Date.now() - (state.timestamp || 0) > timeout) {
+            global.set("deviceTrigger_" + automation.id + "_" + trigger.mac, { satisfied: false, timestamp: Date.now() });
             deviceTriggersSatisfied.push(false);
-        }} else {{
+        } else {
             deviceTriggersSatisfied.push(state.satisfied);
-        }}
-    }}
-}});
+        }
+    }
+});
 
-// Giả định logic là "AND"
-let allTriggersSatisfied = timeTriggerSatisfied && deviceTriggersSatisfied.every(s => s);
+// Logic dựa trên isMatchAll
+let allTriggersSatisfied;
+if (automation.isMatchAll === false) {
+    allTriggersSatisfied = timeTriggerSatisfied || (deviceTriggersSatisfied.length > 0 && deviceTriggersSatisfied.some(s => s));
+} else {
+    allTriggersSatisfied = timeTriggerSatisfied && deviceTriggersSatisfied.every(s => s);
+}
 
-if (allTriggersSatisfied) {{
-    const messages = automation.actions.map(action => ({{
-        topic: "device/" + action.mac + "/command",
-        payload: JSON.stringify({{ [action.property]: action.value }})
-    }}));
-    if (automation.isOnce) {{
+if (allTriggersSatisfied) {
+    const messages = automation.actions.map(action => {
+        const payloadObj = {};
+        payloadObj[action.property] = action.value;
+        return {
+            topic: "device/" + action.mac + "/command",
+            payload: JSON.stringify(payloadObj)
+        };
+    });
+    if (automation.isOnce) {
         global.set("executed_" + automation.id, true);
-    }}
+    }
     return messages;
-}}
+}
 return null;
-""".format(automation_json=json.dumps(automation))
+""".replace("AUTOMATION_JSON", automation_json)
     return func
 
 if __name__ == "__main__":
