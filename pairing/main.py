@@ -35,7 +35,7 @@ def get_gateway_mac():
         raise Exception("Failed to retrieve a valid gateway MAC address")
     
 macAddress = get_gateway_mac()
-MQTT_TOPIC_PAIRING = "gateway/{macAddress}/pairing"
+MQTT_TOPIC_PAIRING = f"gateway/{macAddress}/pairing"
 
 
 def get_wifi_credentials():
