@@ -13,7 +13,7 @@ MQTT_TOPIC_PAIRING = "shenhome/pairing"
 
 # UDP Configuration
 UDP_IP = "255.255.255.255"
-UDP_PORT = 8888
+UDP_PORT = 4210
 
 def get_wifi_credentials():
     """Fetch SSID and password from network manager."""
@@ -50,7 +50,7 @@ def on_message(client, userdata, message):
         udp_data = json.dumps({"ssid": ssid, "password": password, "ip": pi_ip})
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        udp_socket.sendto(udp_data.encode(), (UDP_IP, UDP_PORT))
+        udp_socket.sendto(udp_data.encode(), (UDP_IP, UDP_PORT))  
         print(f"Sent UDP Broadcast: SSID={ssid}, IP={pi_ip}")
 
 
