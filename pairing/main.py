@@ -3,17 +3,40 @@ import socket
 import json
 import subprocess
 import paho.mqtt.client as mqtt
+import netifaces
 
 # MQTT Configuration
 MQTT_BROKER = os.getenv("MQTT_BROKER", "default-broker")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 8883))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "default-user")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "default-password")
-MQTT_TOPIC_PAIRING = "shenhome/pairing"
 
 # UDP Configuration
 UDP_IP = "255.255.255.255"
 UDP_PORT = 4210
+
+def get_gateway_mac():
+    """Gets the MAC address of the default gateway"""
+    try:
+        interfaces = netifaces.interfaces()
+        if not interfaces:
+            raise Exception("No network interfaces found")
+
+        target_interface = "eth0" if "eth0" in interfaces else "wlan0" if "wlan0" in interfaces else interfaces[0]
+        
+        mac = netifaces.ifaddresses(target_interface)[netifaces.AF_LINK][0]["addr"]
+        if not mac or mac.lower() == "00:00:00:00:00:00":
+            raise Exception(f"Invalid MAC address for interface {target_interface}")
+
+        mac = mac.lower()
+        return mac
+    except Exception as e:
+        print(f"Error getting gateway MAC: {e}")
+        raise Exception("Failed to retrieve a valid gateway MAC address")
+    
+macAddress = get_gateway_mac()
+MQTT_TOPIC_PAIRING = "gateway/{macAddress}/pairing"
+
 
 def get_wifi_credentials():
     """Fetch SSID and password from network manager."""
@@ -36,6 +59,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     """Callback when connected to MQTT broker."""
     if reason_code == 0:
         print("Connected to HiveMQ Cloud!")
+        print("Subscribing to topic: " + MQTT_TOPIC_PAIRING)
         client.subscribe([(MQTT_TOPIC_PAIRING, 0)])
     else:
         print(f"Failed to connect, reason: {reason_code}")
